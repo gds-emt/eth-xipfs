@@ -20,17 +20,21 @@ Sending of encrypted data, including but not limited to cipher and ciphertext, o
 
 ## Specification
 
+xIPFS includes Ethereum function calls augmented by IPFS whether or not encryption is used.
+
 ### Encryption scheme
 
 xIPFS utilizes a similar encryption design as Pretty Good Privacy (PGP) involving both symmetric-key cryptography and public-key (RSA) cryptography.
 
-#### Encryption flow
+#### Encryption procedures (client-side)
 
 1. Prepare payload of function arguments in JSON array without the function name or argument names, for instance:
 
     ```json
-      ["param1", 2344', "param3"]
+      ["param1", 2344, "param3"]
     ```
+
+    For the case without encryption, this JSON array should be directly hosted on IPFS with its hash submitted to xIPFS-supported function.
 
 1. Select a supported symmetric-key cipher of choice, say aes-256-cbc. Randomly, or psuedo-randomly generate the key, and initialization vector (IV) (if required by cipher of choice).
 
@@ -49,13 +53,45 @@ xIPFS utilizes a similar encryption design as Pretty Good Privacy (PGP) involvin
     }
     ```
 
-#### Decryption flow
+#### Decryption procedures (server-side)
 
+1. Obtain the full JSON object from IPFS with `data`, `key`, `iv` and `cipher`.
 
+1. Derive the symmetric key and IV by decrypting them using a private key of the published public key.
 
+1. Decrypt the actual payload – function arguments by performing symmetric-key decryption using the specified cipher, decrypted key and decrypted IV. This should give you the very payload (JSON array) from step 1 of encryption procedure.
 
-## Limitations
+### Smart contract
 
+#### Key generation
 
+Service provider is to generate RSA public-private key pair. This can be done using standard `openssl` command, as so:
 
+```bash
+openssl genrsa -out ./privkey.pem 2048;
+openssl rsa -in ./privkey.pem -pubout -out ./pubkey.pem;
+```
 
+A minimum of 2048-bit is recommended.
+
+#### Public key
+
+Public key is published at smart contract at the storage variable `string xIPFSPublicKey` of the main contract, stripping out end lines, header and footer of PEM.
+
+#### xIPFS functions
+
+Functions that support xIPFS should have accompanying non-xIPFS functions.
+
+For example, first consider the following non-xIPFS function
+
+```
+function fn(uint param1, address param2, string param3, uiint256 param4)
+```
+
+A compatible xIPFS function can be introduced by appending `x` prefix to the function name and capitalizing the next letter of the function name, and accepting only a single argument `(string ipfs_hash)`. For the same example, a compatible xIPFS function would be:
+
+```
+function xFn(string ipfs_hash)
+```
+
+`ipfs_hash` would be the hash of IPFS where the payload can be found, either encrypted or not. The final content of it would be a JSON array representation of the original non-xIPFS function in the exact same order and without the parameter name or key.
